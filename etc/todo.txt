@@ -1,0 +1,8 @@
+Date - 17/July/2019
+
+2. Build the CNN model for yolo using keras.
+
+
+Date - 18/July/2019
+
+1. Add command line arguments to anchor_boxes.py
