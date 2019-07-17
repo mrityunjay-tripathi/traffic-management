@@ -1,0 +1,4 @@
+Date - 17/July/2019
+
+1. Extract shapes of anchor boxes using K-Means Clustering from the available xml-details.
+2. Build the CNN model for yolo using keras.

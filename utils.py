@@ -1,38 +1,50 @@
 import os
+import argparse
 import pandas as pd
 import xml.etree.ElementTree as ET
 from PIL import Image
 
 def rename_multiple_files(path):
-
-    i=0
-
+    name=0
+    SUCCESSFUL = 0
+    UNSUCCESSFUL = 0
+    print('Processing...')
     for filename in os.listdir(path):
         try:
             f,extension = os.path.splitext(path+filename)
             src=path+filename
-            dst=path+str(i)+extension
+            dst=path+str(name)+extension
             os.rename(src,dst)
-            i+=1
-            print('Rename successful.')
+            name+=1
+            SUCCESSFUL += 1
         except:
-            i+=1
-            print('Unable to rename.')
+            name+=1
+            UNSUCCESSFUL += 1
+    print('Process Complete!')
+    print('{} file(s) successfully resized.'.format(SUCCESSFUL))
+    print('Unable to resize {} file(s).'.format(UNSUCCESSFUL))
 
 
             
-def resize_multiple_images(src_path, dst_path):
-    # Here path is the location where images are saved.
+def resize_multiple_images(src_path, dst_path, size):
+    SUCCESSFUL = 0
+    UNSUCCESSFUL = 0
+    print('Processing...')
     for filename in os.listdir(src_path):
         try:
             img=Image.open(src_path+filename)
-            new_img = img.resize((832,624))
+            new_img = img.resize(size)
             if not os.path.exists(dst_path):
                 os.makedirs(dst_path)
             new_img.save(dst_path+filename)
-            print('Resized and saved {} successfully.'.format(filename))
+            SUCCESSFUL += 1
         except:
+            UNSUCCESSFUL += 1
             continue
+    print('Process Complete!')
+    print('{} file(s) successfully resized.'.format(SUCCESSFUL))
+    print('Unable to resize {} file(s).'.format(UNSUCCESSFUL))
+
 
 def xml_to_csv(path):
     xml_list = []
@@ -51,14 +63,7 @@ def xml_to_csv(path):
                 xml_list.append(value)
         except:
             continue
-    columns = ['filename',
-	       'width', 
-	       'height', 
-	       'class', 
-               'xmin', 
-	       'ymin', 
-   	       'xmax',
-	       'ymax']
+    columns = ['filename', 'width', 'height', 'class', 'xmin', 'ymin', 'xmax', 'ymax']
     xml_df = pd.DataFrame(xml_list, columns = columns)
     return xml_df
 
