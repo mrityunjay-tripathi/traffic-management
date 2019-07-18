@@ -4,7 +4,7 @@ from tensorflow.keras.models import Model, Sequential
 from tensorflow.keras.layers import Activation, Dense, Flatten, Conv2D, MaxPooling2D, BatchNormalization, Dropout, LeakyReLU
 from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint, TensorBoard
 from tensorflow.keras.layers.merge import concatenate
-from keras.optimizers import SGD, Adam, RMSprop
+from tensorflow.keras.optimizers import SGD, Adam, RMSprop
 
 
 

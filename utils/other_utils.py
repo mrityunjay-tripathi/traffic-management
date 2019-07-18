@@ -68,4 +68,16 @@ def xml_to_csv(path):
     return xml_df
 
 
+def get_normalized_dimensions_from_csv(path_to_xml):
+    data = xml_to_csv(path_to_xml)
+    IMG_W = data['width'][0]
+    IMG_H = data['height'][0]
+    data['x'] = (data['xmax'] + data['xmin'])/2/IMG_W
+    data['y'] = (data['ymax'] + data['ymin'])/2/IMG_H
+    data['w'] = (data['xmax'] - data['xmin'])/IMG_W
+    data['h'] = (data['ymax'] - data['ymin'])/IMG_H
+
+    return data
+
+
 
