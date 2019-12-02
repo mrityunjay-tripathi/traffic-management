@@ -48,75 +48,6 @@ def ResizeMultipleImages(src_path, dst_path, size):
     print(f'{s}/{s + f} file(s) resized successfully.')
 
 
-def BoundingBoxes(xml_file_path, format = 'numpy'):
-    root = ET.parse(xml_file_path).getroot()
-    bb_info = {'path':[],'width':[], 'height':[], 
-               'class':[], 'xmin':[], 'ymin':[], 'xmax':[], 'ymax':[]}
-
-    for member in root.findall('object'):
-        bb_info['path'].append(root.find('path').text)
-        bb_info['width'].append(int(root.find('size')[0].text))
-        bb_info['height'].append(int(root.find('size')[1].text))
-        bb_info['class'].append(member[0].text)
-        bb_info['xmin'].append(int(member[4][0].text))
-        bb_info['ymin'].append(int(member[4][1].text))
-        bb_info['xmax'].append(int(member[4][2].text))
-        bb_info['ymax'].append(int(member[4][3].text))
-    
-    if format=='numpy':
-        return pd.DataFrame.from_dict(bb_info).values
-    elif format=='dataframe':
-        return pd.DataFrame.from_dict(bb_info)
-
-
-def NormalizedBB(xml_file_path):
-    root = ET.parse(xml_file_path).getroot()
-    bb_norm = {'path':[], 'class':[], 'x':[], 'y':[], 'w':[], 'h':[]}
-    for member in root.findall('object'):
-        IMG_W = int(root.find('size')[0].text)
-        IMG_H = int(root.find('size')[1].text)
-        bb_norm['path'].append(root.find('path').text)
-        bb_norm['class'].append(member[0].text)
-        bb_norm['x'].append((int(member[4][2].text) + int(member[4][0].text))/2/IMG_W)
-        bb_norm['y'].append((int(member[4][3].text) + int(member[4][1].text))/2/IMG_H)
-        bb_norm['w'].append((int(member[4][2].text) - int(member[4][0].text))/IMG_W)
-        bb_norm['h'].append((int(member[4][3].text) - int(member[4][1].text))/IMG_H)
-    return bb_norm
-
-
-def GetAnchorBoxes(annotations_path, num_of_boxes = 5):
-    rect = []
-
-    for filename in os.listdir(annotations_path):
-        w = NormalizedBB(annotations_path + filename)['w']
-        h = NormalizedBB(annotations_path + filename)['h']
-        rect.append([w,h])
-    
-    rect = np.squeeze(np.array(rect))
-    kmeans = KMeans(n_clusters = num_of_boxes, random_state = 0).fit(rect)
-    #labels = kmeans.labels_
-    boxes = kmeans.cluster_centers_
-    return boxes
-
-
-def PlotBoxes(boxes):
-    center = (0, 0)
-    for i in boxes:
-        xmin = center[0] - i[0]/2
-        xmax = center[0] + i[0]/2
-        ymin = center[1] - i[1]/2
-        ymax = center[1] + i[1]/2
-        plt.plot([xmin, xmax, xmax, xmin, xmin], [ymin, ymin, ymax, ymax, ymin])
-    plt.title('Anchor Boxes')
-    plt.show()
-
-
-def NonMaxSuppression(boxes, scores, classes, max_output_size, iou_threshold = 0.6):    
-    pass
-    # TODO: Implement NMS in pytorch
-
-
-
 if __name__ == "__main__":
     parser = optparse.OptionParser()
     parser.add_option("-p", "--path", dest = "action_path", 
@@ -140,3 +71,7 @@ if __name__ == "__main__":
     if new_width and new_height:
         ResizeMultipleImages(path, path, 
                              size = (new_width, new_height))
+    elif new_width or new_height:
+        edge = new_width if new_width else new_height
+        ResizeMultipleImages(path, path, 
+                             size = (edge, edge))
