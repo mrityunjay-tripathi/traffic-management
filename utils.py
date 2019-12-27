@@ -44,7 +44,7 @@ def ResizeMultipleImages(src_path, dst_path, size):
             print(f"Error: [{filename}]", e)
             f += 1
             continue
-    print('Process Complete!',100*' ')
+    print('[#]Process Complete!',100*' ')
     print(f'{s}/{s + f} file(s) resized successfully.')
 
 
