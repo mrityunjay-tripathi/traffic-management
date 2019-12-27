@@ -8,144 +8,100 @@ import xml.etree.ElementTree as ET
 from sklearn.cluster import KMeans
 
 
-### Get information of the the bounding boxes
-def BoundingBoxes(xml_file_path, format = 'numpy'):
+### Get information of the the true bounding boxes
+### DONE
+def TrueBoxes(xml_file_path):
     root = ET.parse(xml_file_path).getroot()
-    bb_info = {'path':[],'width':[], 'height':[], 
-               'class':[], 'xmin':[], 'ymin':[], 'xmax':[], 'ymax':[]}
-
-    for member in root.findall('object'):
-        bb_info['path'].append(root.find('path').text)
-        bb_info['width'].append(int(root.find('size')[0].text))
-        bb_info['height'].append(int(root.find('size')[1].text))
-        bb_info['class'].append(member[0].text)
-        bb_info['xmin'].append(int(member[4][0].text))
-        bb_info['ymin'].append(int(member[4][1].text))
-        bb_info['xmax'].append(int(member[4][2].text))
-        bb_info['ymax'].append(int(member[4][3].text))
-    
-    if format=='numpy':
-        return pd.DataFrame.from_dict(bb_info).values
-    elif format=='dataframe':
-        return pd.DataFrame.from_dict(bb_info)
-
-### Get normalized width, height and center=(x,y) of the bounding boxes of an image
-def NormalizedBB(xml_file_path):
-    root = ET.parse(xml_file_path).getroot()
-    bb_norm = {'path':[], 'class':[], 'x':[], 'y':[], 'w':[], 'h':[]}
+    true_boxes = []
+    class_label = {'plate':0}
     for member in root.findall('object'):
         IMG_W = int(root.find('size')[0].text)
         IMG_H = int(root.find('size')[1].text)
-        bb_norm['path'].append(root.find('path').text)
-        bb_norm['class'].append(member[0].text)
-        bb_norm['x'].append((int(member[4][2].text) + int(member[4][0].text))/2/IMG_W)
-        bb_norm['y'].append((int(member[4][3].text) + int(member[4][1].text))/2/IMG_H)
-        bb_norm['w'].append((int(member[4][2].text) - int(member[4][0].text))/IMG_W)
-        bb_norm['h'].append((int(member[4][3].text) - int(member[4][1].text))/IMG_H)
-    return bb_norm
-
-### Make n number of anchor boxes 
-def GetAnchorBoxes(annotations_path, num_of_boxes = 5):
-    rect = []
-
-    for filename in os.listdir(annotations_path):
-        w = NormalizedBB(annotations_path + filename)['w']
-        h = NormalizedBB(annotations_path + filename)['h']
-        rect.append([w,h])
+        # path = root.find('path').text
+        value = (IMG_W,
+                IMG_H,
+                int(member[4][0].text), #xmin
+                int(member[4][1].text), #ymin
+                int(member[4][2].text), #xmax
+                int(member[4][3].text), #ymax
+                class_label[member[0].text]) #class
+        true_boxes.append(value)
     
-    rect = np.squeeze(np.array(rect))
-    kmeans = KMeans(n_clusters = num_of_boxes, random_state = 0).fit(rect)
-    #labels = kmeans.labels_
-    boxes = kmeans.cluster_centers_
-    return boxes
+    return true_boxes
 
-
-### Visualize the anchor boxes
-def PlotAnchorBoxes(boxes):
-    center = (0, 0)
-    for i in boxes:
-        xmin = center[0] - i[0]/2
-        xmax = center[0] + i[0]/2
-        ymin = center[1] - i[1]/2
-        ymax = center[1] + i[1]/2
-        plt.plot([xmin, xmax, xmax, xmin, xmin], [ymin, ymin, ymax, ymax, ymin])
-    plt.title('Anchor Boxes')
-    plt.show()
-
-
-### convert normalized anchor boxes back to bounding boxes with coordinates
-def BoxCoordinates(box, image_shape = (480,640)):
-    ### x = (xmin + xmax)/2/IMG_WIDTH
-    ### y = (ymin + ymax)/2/IMG_HEIGHT
-    ### w = (xmax - xmin)/IMG_WIDTH
-    ### h = (ymax - ymin)/IMG_WIDTH
-    x,y,w,h = box.T
-    xmax = image_shape[1]*(2*x + w).unsqueeze(-1)
-    xmin = image_shape[1]*(2*x - w).unsqueeze(-1)
-    ymax = image_shape[0]*(2*y + h).unsqueeze(-1)
-    ymin = image_shape[0]*(2*y - w).unsqueeze(-1)
-
-    coordinates = torch.cat((xmax,xmin,ymax,ymin), axis = -1)
-    return coordinates
-
-
-### Intersection over union ratio
-def IoU(box1, box2):
-    x1 = max(box1[0], box2[0])
-    y1 = max(box1[1], box2[1])
-    x2 = min(box1[2], box2[2])
-    y2 = min(box1[3], box2[3])
+### Get normalized width, height and center=(x,y) of the bounding boxes of an image
+def ProcessedBB(boxes, anchors, image_shape, grid_shape, num_of_classes):
+    num_anchors = len(anchors)
+    grid = np.zeros(shape=(grid_shape[0], grid_shape[1], num_anchors, 6+num_of_classes))
+    reduction_factor = image_shape[0]/grid_shape[0]
     
-    intersection_area = (x2 - x1)*(y2 - y1)
+    for box in boxes:
+        box_center = ((box[4]+box[2])/2, (box[5]+box[3])/2)
+        grid_x = int(box_center[0]//reduction_factor)
+        grid_y = int(box_center[1]//reduction_factor)
+        # best IOU of true box and anchor boxes.
+        x, y = box_center[0]/box[0], box_center[1]/box[1]
+        w, h = abs(box[4]-box[2])/box[0], abs(box[5]-box[3])/box[1]
+        box_area = w*h
+        best_iou = 0
+        best_anchor = 0
+        for i, anchor in enumerate(anchors):
+            anchor_area = anchor[0]*anchor[1]
+            intersection_area = min(h,anchor[1])*min(w,anchor[0])
+            iou = intersection_area/(box_area + anchor_area - intersection_area)
+            if iou>best_iou:
+                best_iou = iou
+                best_anchor = i
+        grid[grid_x, grid_y, best_anchor, 0:6] = np.array([1, best_iou, x, y, w, h])
+        grid[grid_x, grid_y, best_anchor, 6:] = np.eye(num_of_classes)[box[-1]]
+    return grid
 
-    box1_area = (box1[3] - box1[1])*(box1[2] - box1[0])
-    box2_area = (box2[3] - box2[1])*(box2[2] - box2[0])
-
-    union_area = (box1_area + box2_area) - intersection_area
-
-    iou = torch.div(intersection_area, union_area)
-    return iou.item()
-
-
-### Non Max Suppression
-def NMS(scores, boxes, classes, max_boxes = 10, iou_threshold = 0.5):
-
-    nms_indices = torchvision.ops.nms(boxes, scores, iou_threshold)
-    scores = scores[nms_indices]
-    boxes = boxes[nms_indices]
-    classes = classes[nms_indices]
-
-    return scores, boxes, classes
-
-
-### YOLO loss function
-def cost(output, box_confidence, actual, ):
+def Loss(batch_output, batch_actual, anchors, num_of_classes):
+    '''
+    Arguments:
+    batch_output :- 
+        - type = tensor
+        - output from yolo architecture
+        - shape = (batch_size, grid_shape[0], grid_shape[1], num_of_anchors*(5 + num_of_classes))
+    batch_actual :-
+        - type = tensor
+        - preprocessed grid information of bounding boxes
+        - shape = (batch_size, grid_shape[0], grid_shape[1], num_of_anchors, 7)
+    
+    Return:
+    loss    
+    '''
     L_coord = 5
     L_noobj = 0.5
-    '''
-    Required:
-    box_confidence, (x,y), (h,w), (x_hat, y_hat), (h_hat, w_hat), actual classes, output classes
-    '''
-    cost = L_coord*()
+    pred_xy, pred_wh, pred_confidence, pred_class_probs = Head(batch_output = batch_output, 
+                                                           anchors = anchors, 
+                                                           num_of_classes = num_of_classes)
+    
+    pass
+
+### extract (x,y) and width-height of predicted bounding boxes.
+### ...and box_confidence, box class probabilities
+### DONE
+def Head(batch_output, anchor_boxes, num_of_classes):
+
+    num_anchors = len(anchor_boxes)
+
+    batch_output_reshaped = batch_output.view(batch_output.shape[0], #num_batches
+                                              batch_output.shape[1], #height
+                                              batch_output.shape[2], #width
+                                              num_anchors,           #number of anchor boxes
+                                              batch_output.shape[3]//num_anchors) #channels//num_anchors
+    box_confidence = torch.sigmoid(batch_output_reshaped[..., 0].unsqueeze(-1))
+    box_class_probs = torch.softmax(batch_output_reshaped[...,5:], dim = -1)
+    box_xy = torch.sigmoid(batch_output_reshaped[...,1:3])
+    box_wh = torch.exp(batch_output_reshaped[...,3:5])
+    return box_xy, box_wh, box_confidence, box_class_probs
     
 
-def Evaluate(output, image_shape = (480.0, 640.0),
-             num_of_classes = 10, num_of_anchor_boxes = 5,
-             score_threshold = 0.6, iou_threshold = 0.5):
+def FilterBoxes(box_confidence, box_class_probs, boxes,
+             score_threshold = 0.5):
     
-    output_reshaped = output.view(output.shape[0], 
-                                  output.shape[1], 
-                                  num_of_anchor_boxes, 
-                                  output.shape[2]//num_of_anchor_boxes)
-    
-    print(output_reshaped.shape)
-    box_confidence = output_reshaped[:,:,:,0].unsqueeze(-1)
-    print(box_confidence.shape)
-    box_class_probs = output_reshaped[:,:,:,5:5+num_of_classes]
-    print(box_class_probs.shape)
-    boxes = output_reshaped[:,:,:,1:5]
     box_scores = torch.mul(box_confidence, box_class_probs)
-    print(box_scores.shape)
     box_classes = torch.argmax(box_scores, axis = -1)
     box_class_scores = torch.max(box_scores, axis = -1).values
 
@@ -154,12 +110,3 @@ def Evaluate(output, image_shape = (480.0, 640.0),
     boxes = boxes[filtering_mask]
     classes = box_classes[filtering_mask]
     return scores, boxes, classes
-    
-
-# output = torch.rand(12,16,125)
-# scores, boxes, classes = Evaluate(output, num_of_classes=20)
-
-# coordinates = BoxCoordinates(boxes)
-# print(coordinates)
- 
-    
