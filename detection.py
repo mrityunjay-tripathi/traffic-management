@@ -1,33 +1,30 @@
-import pandas as pd
-import torch.nn as nn
-from PIL import Image
-import torch, torchvision
-import torch.optim as optim
-import torch.nn.functional as F
-import matplotlib.pyplot as plt
-import math, os, sys, numpy as np
-from torchvision import transforms
-from net import Net
-from dataset import NumberPlateDataset
-from torch.utils.data import DataLoader, Dataset
+import math
+import os
+import sys
 
+import matplotlib.pyplot as plt
+import numpy as np
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import torch.optim as optim
+import torchvision
+from PIL import Image
+from torch.utils.data import DataLoader, Dataset
+from torchvision import transforms
+
+from dataset import NumberPlateDataset
+from net import Net
+from YOLOUtils import Loss
 
 
 class Detect():
-    def __init__(self, trainloader, 
-                 lr0 = 0.001, epochs = 10, batch_size = 64):
-        """
-        Our  learning  rate  schedule  is  as  follows:  
-        For  the  first epochs we slowly raise the learning rate from
-        10−3 to 10−2. If we start at a high learning rate our model 
-        often diverges due to unstable gradients.  
-        We continue training with 10−2 for 75 epochs, 
-        then 10−3 for 30 epochs, and finally 10−4 for 30 epochs.
-        """
-        self.trainloader = trainloader
+    def __init__(self,
+                 batch_size, lr0, epochs):
+        self.batch_size = batch_size
         self.lr = lr0
         self.epochs = epochs
-        self.batch_size = batch_size
+        self.device = ('cuda' if torch.cuda.is_available() else "cpu")
     
     def save_model(self, net, PATH):
         torch.save(net.state_dict(), PATH)
@@ -38,9 +35,13 @@ class Detect():
         return net
 
 
-    def train(self, number_of_samples):
+    def train(self, trainloader):
+        num_samples = len(trainloader.dataset)
+        num_batches = math.ceil(num_samples/self.batch_size)
         ### initialize neural net
         net = Net()
+
+        net.to(self.device)
 
         ### clear gradient buffer
         net.zero_grad()
@@ -51,29 +52,34 @@ class Detect():
                                      lr = self.lr*(10**(epochs/10)), weight_decay=5e-4)
 
         ### start training
-        num_of_batches = math.ceil(number_of_samples/self.batch_size)
 
         print("[#] Training started...")
         epoch_loss = []
         for epoch in range(epochs):
             running_loss = 0
-            for data in self.trainloader:
+            for data in trainloader:
                 ### get inputs and annotations from image and xml file
-                inputs, annotations = data['image'], data['bounding_boxes']
-                
-
-                ### extract set of (x,y) and (w,h) from annotations
+                inputs = data['image'].to(self.device)
+                true_boxes = data['bounding_boxes'].to(self.device)
 
                 ### clear the gradient buffer of optimizer
                 optimizer.zero_grad()
+
+                ### forward propagation
                 outputs = net(inputs)
-                # loss = cost()
-                # loss.backward()
+
+                ### calculate loss
+                loss = Loss(batch_output = outputs, batch_true=true_boxes)
+
+                ### backpropagate cost function
+                loss.backward()
+
+                ### update the weights
                 optimizer.step()
 
-                # running_loss += loss.item()
+                running_loss += loss.item()
                 print(f"Running loss : {round(running_loss, 5)}", end = "\r")
-            running_loss /= num_of_batches
+            running_loss /= self.num_of_batches
             epoch_loss.append(running_loss)
             print(100*"=")
             print(f"Epoch : {epoch + 1}")
@@ -90,7 +96,7 @@ class Detect():
 
 
 
-def dataloader(train_images_path, train_annotations_path, batch_size = 64):
+def dataloader(train_images_path, train_annotations_path, batch_size):
     transform = transforms.Compose([transforms.Grayscale(num_output_channels=1),
                                     transforms.ToTensor()])
     anchors = [(0.65, 0.31), (0.12,0.38), (0.56, 0.39), (0.7,0.3),(0.6,0.42)]
@@ -98,12 +104,11 @@ def dataloader(train_images_path, train_annotations_path, batch_size = 64):
                                anchors = anchors,
                                annotations_path = train_annotations_path,
                                transform = transform)
-    num_of_train_samples = len(train)
     train_loader = DataLoader(train,
                               batch_size = batch_size,
                               shuffle = True,
-                              num_workers = 2)
-    return train_loader, num_of_train_samples
+                              num_workers = 1)
+    return train_loader
 
 
 if __name__ == "__main__":
@@ -111,12 +116,15 @@ if __name__ == "__main__":
     ### parameters
     train_path = "/media/mrityunjay/ExpandableDrive/EDUCATIONAL/CSE/AI/Datasets/number_plate_dataset/train/"
     annotations_path = "/media/mrityunjay/ExpandableDrive/EDUCATIONAL/CSE/AI/Datasets/number_plate_dataset/train_annotations/"
-    batch_size = 64
-    lr = 0.01
-    epochs = 10
+    batch_size = 16
+    lr0 = 0.01
+    epochs = 1
 
-    train_loader, num_of_train_samples = dataloader(train_images_path = train_path,
-                                                    train_annotations_path = annotations_path,
-                                                    batch_size = batch_size)
-    for data in train_loader:
-        batch_images, batch_true_boxes = data['image'], data['true_boxes']
+    train_loader = dataloader(train_images_path = train_path,
+                            train_annotations_path = annotations_path,
+                            batch_size = batch_size)
+    d = Detect(lr0 = lr0,
+               epochs = epochs,
+               batch_size = batch_size)
+    net = d.train(train_loader)
+    d.save_model(net, PATH = './saved_model.pth')
