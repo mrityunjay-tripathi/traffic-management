@@ -3,6 +3,20 @@ import torch, torchvision
 from PIL import Image
 import xml.etree.ElementTree as ET
 
+configurations = {}
+with open("../traffic_management/config/yolo.cfg", "r+") as config:
+    for line in config:
+        key, value = line.split("=")
+        if key:
+            configurations[key] = eval(value)
+
+image_shape = configurations['image_shape']
+grid_shape = configurations['grid_shape']
+anchors = configurations['anchors']
+num_anchors = len(anchors)
+num_classes = configurations['num_classes']
+print(num_classes)
+del configurations
 
 def TrueBoxes(xml_file_path):
     """
@@ -36,7 +50,7 @@ def TrueBoxes(xml_file_path):
     return true_boxes
 
 
-def ProcessedBB(boxes, anchors, image_shape, grid_shape, num_classes):
+def ProcessedBB(boxes):
     """
     Arguments:
     1) boxes -
@@ -59,8 +73,7 @@ def ProcessedBB(boxes, anchors, image_shape, grid_shape, num_classes):
     1) grid -
         # grid having information about each grid cell
     """
-    num_anchors = len(anchors)
-    grid = np.zeros(shape=(grid_shape[0], grid_shape[1], num_anchors, 6+num_classes))
+    grid = np.zeros(shape=(grid_shape[0], grid_shape[1], num_anchors, 5+num_classes))
     reduction_factor = image_shape[0]/grid_shape[0]
     
     for box in boxes:
@@ -85,7 +98,7 @@ def ProcessedBB(boxes, anchors, image_shape, grid_shape, num_classes):
     return grid
 
 
-def Head(grid, num_anchors, true_grid = False):
+def Head(grid, true_grid = False):
     '''
     Arguments:
     1) grid -
@@ -108,11 +121,11 @@ def Head(grid, num_anchors, true_grid = False):
         box_wh = grid[...,3:5] # index 3 = w, index 4 = h
         return box_xy, box_wh, box_confidence, box_class_probs
     else:
-        grid = grid.view(grid.shape[0], #num_batches
-                                              grid.shape[1], #height
-                                              grid.shape[2], #width
-                                              num_anchors,           #number of anchor boxes
-                                              grid.shape[3]//num_anchors) #channels//num_anchors
+        grid = grid.view(grid.shape[0],#num_batches
+                        grid.shape[2], #height
+                        grid.shape[3], #width
+                        num_anchors,   #number of anchor boxes
+                        grid.shape[1]//num_anchors) #channels//num_anchors
         box_confidence = torch.sigmoid(grid[..., 0].unsqueeze(-1))
         box_class_probs = torch.softmax(grid[...,5:], dim = -1)
         box_xy = torch.sigmoid(grid[...,1:3]) # index 1 = x, index 2 = y
@@ -123,26 +136,21 @@ def Head(grid, num_anchors, true_grid = False):
 def Loss(batch_output, batch_true):
     L_coord = 5
     L_noobj = 0.5
-    num_anchors = batch_true.shape[-2]
-    num_classes = batch_true.shape[-1] - 5
-    pred_xy, pred_wh, pred_confidence, pred_class_probs = Head(grid = batch_output, 
-                                                               num_anchors = num_anchors, 
+    pred_xy, pred_wh, pred_confidence, pred_class_probs = Head(grid = batch_output,
                                                                true_grid = False)
     true_xy, true_wh, true_confidence, true_class_probs = Head(grid = batch_true, 
-                                                               num_anchors = num_anchors, 
                                                                true_grid = True)
-
     # localization loss
-    xy_loss = (pred_xy[0] - true_xy[0]).pow(2) + (pred_xy[1] - true_xy[1]).pow(2)
-    wh_loss = (torch.sqrt(pred_wh[0]) - torch.sqrt(true_wh[0])).pow(2) + \
-        (torch.sqrt(pred_wh[1]) - torch.sqrt(true_wh[1])).pow(2)
-    localization_loss = L_coord*torch.sum(true_confidence*(xy_loss + wh_loss))
+    xy_loss = (pred_xy[...,0] - true_xy[...,0]).pow(2) + (pred_xy[...,1] - true_xy[...,1]).pow(2)
+    wh_loss = (torch.sqrt(pred_wh[...,0]) - torch.sqrt(true_wh[...,0])).pow(2) + \
+        (torch.sqrt(pred_wh[...,1]) - torch.sqrt(true_wh[...,1])).pow(2)
+    localization_loss = L_coord*torch.sum(true_confidence*(xy_loss.unsqueeze(-1) + wh_loss.unsqueeze(-1)))
 
     # classification loss
     classification_loss = torch.sum(true_confidence*(pred_class_probs - true_class_probs).pow(2))
 
     # confidence loss
-    intersect_wh = torch.max(torch.zeros_like(pred_wh), (pred_wh + true_wh)/2 - torch.abs(pred_xy - true_xy))
+    intersect_wh = torch.max(torch.zeros_like(pred_wh, dtype = torch.double), (pred_wh + true_wh)/2 - torch.abs(pred_xy - true_xy))
     intersection_area = intersect_wh[...,0]*intersect_wh[...,1]
     true_area = true_wh[...,0]*true_wh[...,1]
     pred_area = pred_wh[...,0]*pred_wh[...,1]

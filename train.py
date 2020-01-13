@@ -13,9 +13,9 @@ from PIL import Image
 from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms
 
+from utils import writer, yolo_utils
 from dataset import NumberPlateDataset
 from net import Net
-from YOLOUtils import Loss
 
 
 class Detect():
@@ -46,8 +46,7 @@ class Detect():
         ### clear gradient buffer
         net.zero_grad()
 
-        ### define optimizer and loss function
-        criterion = nn.MSELoss()
+        ### define optimizer
         optimizer = optim.Adam(filter(lambda p: p.requires_grad, net.parameters()), 
                                      lr = self.lr*(10**(epochs/10)), weight_decay=5e-4)
 
@@ -60,8 +59,7 @@ class Detect():
             for data in trainloader:
                 ### get inputs and annotations from image and xml file
                 inputs = data['image'].to(self.device)
-                true_boxes = data['bounding_boxes'].to(self.device)
-
+                true_boxes = data['true_boxes'].to(self.device)
                 ### clear the gradient buffer of optimizer
                 optimizer.zero_grad()
 
@@ -69,7 +67,7 @@ class Detect():
                 outputs = net(inputs)
 
                 ### calculate loss
-                loss = Loss(batch_output = outputs, batch_true=true_boxes)
+                loss = yolo_utils.Loss(batch_output = outputs, batch_true=true_boxes)
 
                 ### backpropagate cost function
                 loss.backward()
@@ -78,31 +76,31 @@ class Detect():
                 optimizer.step()
 
                 running_loss += loss.item()
-                print(f"Running loss : {round(running_loss, 5)}", end = "\r")
-            running_loss /= self.num_of_batches
+                # print(f"Running loss : {round(running_loss, 5)}", end = "\r")
+            running_loss /= num_batches
             epoch_loss.append(running_loss)
-            print(100*"=")
-            print(f"Epoch : {epoch + 1}")
-            print(f"Loss : {round(running_loss,5)}")
+            # writer.log(epoch+1, running_loss, 0)
+            # print(100*"=")
+            print("Epoch : %3d\tLoss : %.5f"%(epoch+1, running_loss))
         
         ### plot the loss during training
-        plt.plot([i for i in range(1, self.epochs+1)], epoch_loss)
-        plt.xlabel("Epoch")
-        plt.ylabel("Loss")
-        plt.title(f"Training Loss : Learning Rate = {self.lr}")
-        plt.show()
+        # plt.plot([i for i in range(1, self.epochs+1)], epoch_loss)
+        # plt.xlabel("Epoch")
+        # plt.ylabel("Loss")
+        # plt.title(f"Training Loss : Learning Rate = {self.lr}")
+        # plt.show()
         print("Training Complete :)")
         return net
 
 
 
-def dataloader(train_images_path, train_annotations_path, batch_size):
+def dataloader(images_path, labels_path, batch_size):
     transform = transforms.Compose([transforms.Grayscale(num_output_channels=1),
                                     transforms.ToTensor()])
     anchors = [(0.65, 0.31), (0.12,0.38), (0.56, 0.39), (0.7,0.3),(0.6,0.42)]
-    train = NumberPlateDataset(train_images_path = train_images_path,
+    train = NumberPlateDataset(images_path = images_path,
+                               labels_path = labels_path,
                                anchors = anchors,
-                               annotations_path = train_annotations_path,
                                transform = transform)
     train_loader = DataLoader(train,
                               batch_size = batch_size,
@@ -114,17 +112,18 @@ def dataloader(train_images_path, train_annotations_path, batch_size):
 if __name__ == "__main__":
 
     ### parameters
-    train_path = "/media/mrityunjay/ExpandableDrive/EDUCATIONAL/CSE/AI/Datasets/number_plate_dataset/train/"
-    annotations_path = "/media/mrityunjay/ExpandableDrive/EDUCATIONAL/CSE/AI/Datasets/number_plate_dataset/train_annotations/"
-    batch_size = 16
+    images_path = "../traffic_management/data/custom/images/"
+    labels_path = "../traffic_management/data/custom/labels/"
+    batch_size = 1
     lr0 = 0.01
-    epochs = 1
+    epochs = 10
 
-    train_loader = dataloader(train_images_path = train_path,
-                            train_annotations_path = annotations_path,
-                            batch_size = batch_size)
+    train_loader = dataloader(images_path = images_path,
+                              labels_path = labels_path,
+                              batch_size = batch_size)
     d = Detect(lr0 = lr0,
                epochs = epochs,
                batch_size = batch_size)
     net = d.train(train_loader)
-    d.save_model(net, PATH = './saved_model.pth')
+    os.makedirs("./checkpoints/", exist_ok = True)
+    d.save_model(net, PATH = './checkpoints/saved_model.pth')
