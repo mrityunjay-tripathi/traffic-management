@@ -1,15 +1,7 @@
-<style>
-.center {
-  display: block;
-  margin-left: auto;
-  margin-right: auto;
-  width: 70%;
-}
-</style>
-
 <h1 align = "center" font = "">Traffic Management - The Unconventional Way</h1>
-<img src = "../traffic_management/data/custom/image1.jpg" class = "center">
-
+<p align = "center">
+<img class = "center" width = 70% src="data/custom/image1.jpg">
+</p>
 <p align = "center">This repository is a project under <b>Meghalaya Police Hackathon 2020</b>.</p>
 
 ## Overview
