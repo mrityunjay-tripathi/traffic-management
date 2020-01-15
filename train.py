@@ -112,10 +112,10 @@ def dataloader(images_path, labels_path, batch_size):
 if __name__ == "__main__":
 
     ### parameters
-    images_path = "../traffic_management/data/custom/images/"
-    labels_path = "../traffic_management/data/custom/labels/"
+    images_path = "../traffic_management/data/samples/images/"
+    labels_path = "../traffic_management/data/samples/labels/"
     batch_size = 1
-    lr0 = 0.01
+    lr0 = 0.001
     epochs = 10
 
     train_loader = dataloader(images_path = images_path,

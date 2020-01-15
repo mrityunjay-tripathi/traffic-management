@@ -4,7 +4,7 @@ from PIL import Image
 import xml.etree.ElementTree as ET
 
 configurations = {}
-with open("../traffic_management/config/yolo.cfg", "r+") as config:
+with open("../traffic_management/config/params.cfg", "r+") as config:
     for line in config:
         key, value = line.split("=")
         if key:
@@ -15,7 +15,6 @@ grid_shape = configurations['grid_shape']
 anchors = configurations['anchors']
 num_anchors = len(anchors)
 num_classes = configurations['num_classes']
-print(num_classes)
 del configurations
 
 def TrueBoxes(xml_file_path):
@@ -56,19 +55,6 @@ def ProcessedBB(boxes):
     1) boxes -
         # The list of bounding boxes acquired from using 
           function TrueBoxes.
-    2) anchors - 
-        # the list of anchor boxes used.
-        # eg. [(0.3,0.74), (0.5, 0.12), (0.47, 0.21)]
-        # type(anchors) == <class 'list'>
-    3) image_shape - 
-        # shape of the image
-    4) grid_shape -
-        # shape of the final processed data from image i.e grid
-        # aspect ratio to be maintained
-        # eg. (19,19)
-    5) num_classes - 
-        # different types of classes of objects
-        # type(num_classes) == <class 'int'>
     Returns:
     1) grid -
         # grid having information about each grid cell
@@ -103,9 +89,7 @@ def Head(grid, true_grid = False):
     Arguments:
     1) grid -
         # grid obtained from ProcessedBB function
-    2) num_anchors -
-        # number of anchor boxes used
-    3) true_grid -
+    2) true_grid -
         # type == bool
         # False if grid is output of yolo net.
         # True if grid is coming from from bounding boxes dataset.
@@ -156,7 +140,7 @@ def Loss(batch_output, batch_true):
     pred_area = pred_wh[...,0]*pred_wh[...,1]
     iou = (intersection_area)/(true_area + pred_area - intersection_area)
     iou = iou.unsqueeze(-1)
-    confidence_loss = torch.sum((true_confidence*iou - pred_confidence).pow(2)*true_confidence) 
+    confidence_loss = torch.sum((true_confidence*iou - pred_confidence).pow(2)*true_confidence)
     
     ### total loss
     loss = localization_loss + classification_loss + confidence_loss

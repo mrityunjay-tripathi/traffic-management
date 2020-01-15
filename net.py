@@ -2,7 +2,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 configurations = {}
-with open("../traffic_management/config/yolo.cfg", "r+") as config:
+with open("../traffic_management/config/params.cfg", "r+") as config:
     for line in config:
         key, value = line.split("=")
         if key:
