@@ -144,6 +144,9 @@ def Loss(batch_output, batch_true):
     
     ### total loss
     loss = localization_loss + classification_loss + confidence_loss
+    print("Localization Loss : %.5f\tClassification Loss : %.5f\tConfidence Loss : %.5f"%(localization_loss,
+                                                                                            classification_loss,
+                                                                                            confidence_loss))
 
     return loss
 
