@@ -52,9 +52,10 @@ class Detect():
 
         ### start training
 
-        print("[#] Training started...")
+        print("[#] Training started ...")
         epoch_loss = []
         for epoch in range(epochs):
+            print("Epoch : %3d"%(epoch+1))
             running_loss = 0
             for data in trainloader:
                 ### get inputs and annotations from image and xml file
@@ -76,19 +77,23 @@ class Detect():
                 optimizer.step()
 
                 running_loss += loss.item()
+
+                del outputs
+                del inputs
+                del true_boxes
                 # print(f"Running loss : {round(running_loss, 5)}", end = "\r")
             running_loss /= num_batches
             epoch_loss.append(running_loss)
             # writer.log(epoch+1, running_loss, 0)
             # print(100*"=")
-            print("Epoch : %3d\tLoss : %.5f"%(epoch+1, running_loss))
+            # print("Epoch : %3d\tLoss : %.5f"%(epoch+1, running_loss))
         
         ### plot the loss during training
-        # plt.plot([i for i in range(1, self.epochs+1)], epoch_loss)
-        # plt.xlabel("Epoch")
-        # plt.ylabel("Loss")
-        # plt.title(f"Training Loss : Learning Rate = {self.lr}")
-        # plt.show()
+        plt.plot([i for i in range(1, self.epochs+1)], epoch_loss)
+        plt.xlabel("Epoch")
+        plt.ylabel("Loss")
+        plt.title(f"Training Loss : Learning Rate = {self.lr}")
+        plt.show()
         print("Training Complete :)")
         return net
 
@@ -114,8 +119,8 @@ if __name__ == "__main__":
     ### parameters
     images_path = "../traffic_management/data/samples/images/"
     labels_path = "../traffic_management/data/samples/labels/"
-    batch_size = 1
-    lr0 = 0.001
+    batch_size = 4
+    lr0 = 0.00001
     epochs = 10
 
     train_loader = dataloader(images_path = images_path,
